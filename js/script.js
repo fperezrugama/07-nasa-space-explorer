@@ -8,6 +8,8 @@ const resultsSummary = document.getElementById('resultsSummary');
 const searchInput = document.getElementById('searchInput');
 const favoritesToggle = document.getElementById('favoritesToggle');
 const themeToggle = document.getElementById('themeToggle');
+const spaceFact = document.getElementById('spaceFact');
+const newFactButton = document.getElementById('newFactButton');
 const modal = document.getElementById('modal');
 const appContainer = document.querySelector('.container');
 const closeModalButton = document.getElementById('closeModal');
@@ -29,6 +31,14 @@ let favorites = JSON.parse(localStorage.getItem('nasaFavorites') || '[]');
 let lastFocusedElement;
 const requestCache = new Map();
 let activeRequest = null;
+const spaceFacts = [
+  'A day on Venus is longer than a year on Venus.',
+  'Neutron stars can spin more than 600 times every second.',
+  'The footprints left on the Moon could last for millions of years.',
+  'Jupiter is so large that more than 1,300 Earths could fit inside it.',
+  'Light from the Sun takes about eight minutes to reach Earth.',
+  'Saturn would float in water because its average density is lower than water.'
+];
 
 const formatDate = (date) => new Date(`${date}T00:00:00`).toLocaleDateString('en-US', {
   month: 'short',
@@ -37,6 +47,12 @@ const formatDate = (date) => new Date(`${date}T00:00:00`).toLocaleDateString('en
 });
 
 const shortenText = (text, length = 150) => text.length > length ? `${text.slice(0, length).trim()}…` : text;
+
+function showRandomFact() {
+  const currentFact = spaceFact.textContent;
+  const availableFacts = spaceFacts.filter((fact) => fact !== currentFact);
+  spaceFact.textContent = availableFacts[Math.floor(Math.random() * availableFacts.length)];
+}
 
 function showStatus(message, type = '') {
   statusMessage.textContent = message;
@@ -236,6 +252,7 @@ function closeModal() {
 }
 
 fetchButton.addEventListener('click', getSpaceImages);
+newFactButton.addEventListener('click', showRandomFact);
 searchInput.addEventListener('input', renderGallery);
 favoritesToggle.addEventListener('click', () => {
   showingFavoritesOnly = !showingFavoritesOnly;

@@ -26,6 +26,16 @@
         <p class="hero-copy">Journey through NASA's archive of galaxies, nebulae, planets, and the stories behind them.</p>
       </section>
 
+    <section class="space-fact" aria-labelledby="factTitle">
+      <div class="fact-mark" aria-hidden="true">✦</div>
+      <div>
+        <p class="section-label">Mission brief</p>
+        <h2 id="factTitle">Did you know?</h2>
+        <p id="spaceFact">A day on Venus is longer than a year on Venus.</p>
+      </div>
+      <button id="newFactButton" class="fact-button" type="button">New fact ↻</button>
+    </section>
+
     <div class="filters">
       <div class="date-fields">
         <label for="startDate">From <input type="date" id="startDate" /></label>
@@ -59,6 +69,11 @@
     </div>
     </main>
   </div>
+
+  <footer class="site-footer">
+    <p>Data provided by NASA's Astronomy Picture of the Day API.</p>
+    <a href="https://api.nasa.gov/" target="_blank" rel="noopener">NASA Open APIs ↗</a>
+  </footer>
 
   <div id="modal" class="modal" hidden>
     <div class="modal-backdrop" data-close-modal></div>
