@@ -180,11 +180,14 @@ favoritesToggle.addEventListener('click', () => {
 gallery.addEventListener('click', (event) => {
   const favoriteButton = event.target.closest('[data-favorite]');
   const openButton = event.target.closest('[data-open]');
+  const galleryItem = event.target.closest('.gallery-item');
   if (favoriteButton) {
     event.stopPropagation();
     toggleFavorite(favoriteButton.dataset.favorite);
   } else if (openButton) {
     openModal(spaceImages.find((image) => image.date === openButton.dataset.open));
+  } else if (galleryItem) {
+    openModal(spaceImages.find((image) => image.date === galleryItem.dataset.date));
   }
 });
 gallery.addEventListener('keydown', (event) => {

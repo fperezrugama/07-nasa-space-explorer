@@ -59,7 +59,7 @@ input[type=date] { color-scheme: dark; }
 .status-message { color: var(--muted); font-family: 'DM Mono', monospace; font-size: 12px; min-height: 24px; margin-bottom: 13px; }
 .status-message.success { color: #78d5a3; }.status-message.error { color: #ff8d8a; }
 .gallery { display: grid; gap: 22px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
-.gallery-item { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; transition: border-color .2s, transform .2s; }
+.gallery-item { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; cursor: pointer; overflow: hidden; transition: border-color .2s, transform .2s; }
 .gallery-item:hover, .gallery-item:focus-visible { border-color: var(--blue); outline: 0; transform: translateY(-4px); }
 .card-media { aspect-ratio: 1.35; background: #070a16; overflow: hidden; position: relative; }
 .card-media img { height: 100%; object-fit: cover; transition: transform .5s; width: 100%; }.gallery-item:hover .card-media img { transform: scale(1.04); }
