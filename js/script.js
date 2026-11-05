@@ -20,11 +20,14 @@ const modalLink = document.getElementById('modalLink');
 setupDateInputs(startInput, endInput);
 
 const API_URL = 'https://api.nasa.gov/planetary/apod';
+// Keep the public demo key in this frontend. Personal keys should stay out of source control.
 const API_KEY = 'DEMO_KEY';
 let spaceImages = [];
 let showingFavoritesOnly = false;
 let favorites = JSON.parse(localStorage.getItem('nasaFavorites') || '[]');
 let lastFocusedElement;
+const requestCache = new Map();
+let activeRequest = null;
 
 const formatDate = (date) => new Date(`${date}T00:00:00`).toLocaleDateString('en-US', {
   month: 'short',
@@ -80,23 +83,63 @@ async function getSpaceImages() {
     return;
   }
 
+  const validDate = (date) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+    const parsedDate = new Date(`${date}T00:00:00`);
+    const [year, month, day] = date.split('-').map(Number);
+    return parsedDate.getUTCFullYear() === year &&
+      parsedDate.getUTCMonth() + 1 === month &&
+      parsedDate.getUTCDate() === day;
+  };
+  if (!validDate(startDate) || !validDate(endDate) ||
+      startDate < earliestDate || endDate > today) {
+    showStatus('Choose dates between June 16, 1995 and today.', 'error');
+    return;
+  }
+  if (startDate > endDate) {
+    showStatus('The start date must be before the end date.', 'error');
+    return;
+  }
+
+  const requestKey = `${startDate}:${endDate}`;
+  if (activeRequest === requestKey) return;
+  if (requestCache.has(requestKey)) {
+    spaceImages = requestCache.get(requestKey);
+    renderGallery();
+    showStatus(`Archive loaded · ${formatDate(startDate)} — ${formatDate(endDate)}`, 'success');
+    return;
+  }
+
+  const requestUrl = new URL(API_URL);
+  requestUrl.search = new URLSearchParams({
+    api_key: API_KEY,
+    start_date: startDate,
+    end_date: endDate
+  });
+  activeRequest = requestKey;
   fetchButton.disabled = true;
   fetchButton.innerHTML = 'Scanning the skies <span class="spinner"></span>';
   showStatus('Connecting to NASA…');
   gallery.innerHTML = '<div class="loading-state"><div class="loader"></div><p>Retrieving your cosmic discoveries</p></div>';
 
   try {
-    const response = await fetch(`${API_URL}?api_key=${API_KEY}&start_date=${startDate}&end_date=${endDate}`);
-    if (!response.ok) throw new Error('NASA API request failed');
-    spaceImages = (await response.json()).sort((a, b) => b.date.localeCompare(a.date));
+    const response = await fetch(requestUrl);
+    if (!response.ok) {
+      throw new Error(`NASA API request failed with status ${response.status}`);
+    }
+    const results = await response.json();
+    spaceImages = results.sort((a, b) => b.date.localeCompare(a.date));
+    requestCache.set(requestKey, spaceImages);
     renderGallery();
     showStatus(`Archive loaded · ${formatDate(startDate)} — ${formatDate(endDate)}`, 'success');
   } catch (error) {
+    console.error(error);
     gallery.innerHTML = '<div class="placeholder"><div class="placeholder-icon">📡</div><p>We could not reach NASA right now. Please check your connection and try again.</p></div>';
     showStatus('Unable to load the archive. Please try again.', 'error');
   } finally {
+    activeRequest = null;
     fetchButton.disabled = false;
-    fetchButton.innerHTML = 'Explore images <span>↗</span>';
+    fetchButton.innerHTML = 'Get Space Images <span>↗</span>';
   }
 }
 
