@@ -9,6 +9,7 @@ const searchInput = document.getElementById('searchInput');
 const favoritesToggle = document.getElementById('favoritesToggle');
 const themeToggle = document.getElementById('themeToggle');
 const modal = document.getElementById('modal');
+const appContainer = document.querySelector('.container');
 const closeModalButton = document.getElementById('closeModal');
 const modalMedia = document.getElementById('modalMedia');
 const modalDate = document.getElementById('modalDate');
@@ -53,26 +54,76 @@ function renderGallery() {
 
   resultsSummary.textContent = `${visibleImages.length} ${visibleImages.length === 1 ? 'discovery' : 'discoveries'} found`;
   if (!visibleImages.length) {
-    gallery.innerHTML = `<div class="placeholder"><div class="placeholder-icon">✦</div><p>No discoveries match your filters yet.</p></div>`;
+    showEmptyState('✦', 'No discoveries match your filters yet.');
     return;
   }
 
-  gallery.innerHTML = visibleImages.map((image) => {
+  gallery.replaceChildren(...visibleImages.map((image) => {
     const isFavorite = favorites.includes(image.date);
-    const media = image.media_type === 'video'
-      ? `<div class="video-preview"><span>▶</span><p>NASA video</p></div>`
-      : `<img src="${image.url}" alt="${image.title}" loading="lazy" />`;
-    return `
-      <article class="gallery-item" data-date="${image.date}" tabindex="0">
-        <div class="card-media">${media}<button class="favorite-button ${isFavorite ? 'is-favorite' : ''}" data-favorite="${image.date}" type="button" aria-label="${isFavorite ? 'Remove from favorites' : 'Add to favorites'}">${isFavorite ? '♥' : '♡'}</button></div>
-        <div class="card-content">
-          <p class="card-date">${formatDate(image.date)}</p>
-          <h2>${image.title}</h2>
-          <p class="card-explanation">${shortenText(image.explanation)}</p>
-          <button class="read-more" data-open="${image.date}" type="button">Read story <span>↗</span></button>
-        </div>
-      </article>`;
-  }).join('');
+    const card = document.createElement('article');
+    card.className = 'gallery-item';
+    card.dataset.date = image.date;
+    card.tabIndex = 0;
+
+    const mediaContainer = document.createElement('div');
+    mediaContainer.className = 'card-media';
+    if (image.media_type === 'video') {
+      const videoPreview = document.createElement('div');
+      videoPreview.className = 'video-preview';
+      const playIcon = document.createElement('span');
+      playIcon.textContent = '▶';
+      const videoLabel = document.createElement('p');
+      videoLabel.textContent = 'NASA video';
+      videoPreview.append(playIcon, videoLabel);
+      mediaContainer.append(videoPreview);
+    } else {
+      const thumbnail = document.createElement('img');
+      thumbnail.src = image.url;
+      thumbnail.alt = image.title;
+      thumbnail.loading = 'lazy';
+      mediaContainer.append(thumbnail);
+    }
+
+    const favoriteButton = document.createElement('button');
+    favoriteButton.className = `favorite-button ${isFavorite ? 'is-favorite' : ''}`;
+    favoriteButton.dataset.favorite = image.date;
+    favoriteButton.type = 'button';
+    favoriteButton.setAttribute('aria-label', isFavorite ? 'Remove from favorites' : 'Add to favorites');
+    favoriteButton.textContent = isFavorite ? '♥' : '♡';
+    mediaContainer.append(favoriteButton);
+
+    const content = document.createElement('div');
+    content.className = 'card-content';
+    const date = document.createElement('p');
+    date.className = 'card-date';
+    date.textContent = formatDate(image.date);
+    const title = document.createElement('h2');
+    title.textContent = image.title;
+    const explanation = document.createElement('p');
+    explanation.className = 'card-explanation';
+    explanation.textContent = shortenText(image.explanation);
+    const readMore = document.createElement('button');
+    readMore.className = 'read-more';
+    readMore.dataset.open = image.date;
+    readMore.type = 'button';
+    readMore.textContent = 'Read story ↗';
+    content.append(date, title, explanation, readMore);
+    card.append(mediaContainer, content);
+    return card;
+  }));
+}
+
+function showEmptyState(icon, message) {
+  gallery.replaceChildren();
+  const placeholder = document.createElement('div');
+  placeholder.className = 'placeholder';
+  const iconElement = document.createElement('div');
+  iconElement.className = 'placeholder-icon';
+  iconElement.textContent = icon;
+  const messageElement = document.createElement('p');
+  messageElement.textContent = message;
+  placeholder.append(iconElement, messageElement);
+  gallery.append(placeholder);
 }
 
 async function getSpaceImages() {
@@ -150,21 +201,36 @@ function toggleFavorite(date) {
 }
 
 function openModal(image) {
-  lastFocusedElement = document.activeElement;
-  modalMedia.innerHTML = image.media_type === 'video'
-    ? `<iframe src="${image.url}" title="${image.title}" allowfullscreen></iframe>`
-    : `<img src="${image.hdurl || image.url}" alt="${image.title}" />`;
+  if (!image) return;
+  lastFocusedElement = document.activeElement.closest('.gallery-item') || document.activeElement;
+  modalMedia.replaceChildren();
+
+  if (image.media_type === 'video') {
+    const video = document.createElement('iframe');
+    video.src = image.url;
+    video.title = image.title;
+    video.allowFullscreen = true;
+    modalMedia.append(video);
+  } else {
+    const imageElement = document.createElement('img');
+    imageElement.src = image.hdurl || image.url;
+    imageElement.alt = image.title;
+    modalMedia.append(imageElement);
+  }
+
   modalDate.textContent = formatDate(image.date);
   modalTitle.textContent = image.title;
   modalExplanation.textContent = image.explanation;
   modalLink.href = image.url;
   modal.hidden = false;
+  appContainer.inert = true;
   document.body.classList.add('modal-open');
   closeModalButton.focus();
 }
 
 function closeModal() {
   modal.hidden = true;
+  appContainer.inert = false;
   document.body.classList.remove('modal-open');
   if (lastFocusedElement) lastFocusedElement.focus();
 }
@@ -202,6 +268,20 @@ modal.addEventListener('click', (event) => {
 });
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !modal.hidden) closeModal();
+});
+modal.addEventListener('keydown', (event) => {
+  if (event.key !== 'Tab') return;
+
+  const focusableElements = modal.querySelectorAll('button, a[href], iframe');
+  const firstFocusable = focusableElements[0];
+  const lastFocusable = focusableElements[focusableElements.length - 1];
+  if (event.shiftKey && document.activeElement === firstFocusable) {
+    event.preventDefault();
+    lastFocusable.focus();
+  } else if (!event.shiftKey && document.activeElement === lastFocusable) {
+    event.preventDefault();
+    firstFocusable.focus();
+  }
 });
 themeToggle.addEventListener('click', () => {
   const isLight = document.body.classList.toggle('light-theme');
