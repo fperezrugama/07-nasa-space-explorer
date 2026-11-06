@@ -142,6 +142,22 @@ function showEmptyState(icon, message) {
   gallery.append(placeholder);
 }
 
+function showLoadingState() {
+  gallery.replaceChildren();
+  const loadingState = document.createElement('div');
+  loadingState.className = 'loading-state';
+  const loader = document.createElement('div');
+  loader.className = 'loader';
+  const message = document.createElement('p');
+  message.textContent = 'Loading space photos…';
+  loadingState.append(loader, message);
+  gallery.append(loadingState);
+}
+
+function showErrorState(message) {
+  showEmptyState('📡', message);
+}
+
 async function getSpaceImages() {
   const startDate = startInput.value;
   const endDate = endInput.value;
@@ -186,23 +202,39 @@ async function getSpaceImages() {
   activeRequest = requestKey;
   fetchButton.disabled = true;
   fetchButton.innerHTML = 'Scanning the skies <span class="spinner"></span>';
-  showStatus('Connecting to NASA…');
-  gallery.innerHTML = '<div class="loading-state"><div class="loader"></div><p>Retrieving your cosmic discoveries</p></div>';
+  showStatus('Loading space photos…');
+  showLoadingState();
 
   try {
     const response = await fetch(requestUrl);
     if (!response.ok) {
+      if (response.status === 429) {
+        throw new Error('NASA is rate-limiting requests. Please wait a moment and try again.');
+      }
       throw new Error(`NASA API request failed with status ${response.status}`);
     }
-    const results = await response.json();
-    spaceImages = results.sort((a, b) => b.date.localeCompare(a.date));
+    const responseData = await response.json();
+    const results = Array.isArray(responseData) ? responseData : [responseData];
+    spaceImages = results
+      .filter((image) => image && image.date && image.title && image.explanation &&
+        (image.media_type === 'image' || image.media_type === 'video') && image.url)
+      .sort((a, b) => b.date.localeCompare(a.date));
     requestCache.set(requestKey, spaceImages);
-    renderGallery();
-    showStatus(`Archive loaded · ${formatDate(startDate)} — ${formatDate(endDate)}`, 'success');
+    if (spaceImages.length) {
+      renderGallery();
+      showStatus(`Archive loaded · ${formatDate(startDate)} — ${formatDate(endDate)}`, 'success');
+    } else {
+      showEmptyState('✦', 'NASA returned no usable discoveries for these dates.');
+      showStatus('No space photos were available for this range.', 'error');
+    }
   } catch (error) {
     console.error(error);
-    gallery.innerHTML = '<div class="placeholder"><div class="placeholder-icon">📡</div><p>We could not reach NASA right now. Please check your connection and try again.</p></div>';
-    showStatus('Unable to load the archive. Please try again.', 'error');
+    showErrorState(error.message.includes('rate-limiting')
+      ? error.message
+      : 'We could not load NASA’s space photos. Check your connection and try again.');
+    showStatus(error.message.includes('rate-limiting')
+      ? error.message
+      : 'Unable to load the archive. Please try again.', 'error');
   } finally {
     activeRequest = null;
     fetchButton.disabled = false;
