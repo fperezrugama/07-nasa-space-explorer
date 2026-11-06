@@ -4,6 +4,7 @@ const endInput = document.getElementById('endDate');
 const fetchButton = document.getElementById('fetchButton');
 const gallery = document.getElementById('gallery');
 const statusMessage = document.getElementById('statusMessage');
+const selectedRange = document.getElementById('selectedRange');
 const resultsSummary = document.getElementById('resultsSummary');
 const searchInput = document.getElementById('searchInput');
 const favoritesToggle = document.getElementById('favoritesToggle');
@@ -31,6 +32,7 @@ let favorites = JSON.parse(localStorage.getItem('nasaFavorites') || '[]');
 let lastFocusedElement;
 const requestCache = new Map();
 let activeRequest = null;
+let requestId = 0;
 const spaceFacts = [
   'Jupiter’s Great Red Spot is a storm that has raged for at least 150 years.',
   'The Milky Way galaxy is about 100,000 light-years across.',
@@ -117,7 +119,7 @@ function renderGallery() {
   gallery.replaceChildren(...visibleImages.map((image) => {
     const isFavorite = favorites.includes(image.date);
     const card = document.createElement('article');
-    card.className = 'gallery-item';
+    card.className = image.media_type === 'video' ? 'gallery-item video-card' : 'gallery-item';
     card.dataset.date = image.date;
     card.tabIndex = 0;
 
@@ -203,8 +205,16 @@ function showLoadingState() {
   gallery.append(loadingState);
 }
 
-function showErrorState(message) {
+function showErrorState(message, showRetry = false) {
   showEmptyState('📡', message);
+  if (showRetry) {
+    const retryButton = document.createElement('button');
+    retryButton.className = 'retry-button';
+    retryButton.type = 'button';
+    retryButton.textContent = 'Retry request';
+    retryButton.addEventListener('click', getSpaceImages);
+    gallery.querySelector('.placeholder').append(retryButton);
+  }
 }
 
 async function getSpaceImages() {
@@ -238,6 +248,7 @@ async function getSpaceImages() {
   if (requestCache.has(requestKey)) {
     spaceImages = requestCache.get(requestKey);
     renderGallery();
+    selectedRange.textContent = `${formatDate(startDate)} — ${formatDate(endDate)}`;
     showStatus(`Archive loaded · ${formatDate(startDate)} — ${formatDate(endDate)}`, 'success');
     return;
   }
@@ -249,6 +260,7 @@ async function getSpaceImages() {
     end_date: endDate
   });
   activeRequest = requestKey;
+  const currentRequestId = ++requestId;
   fetchButton.disabled = true;
   fetchButton.innerHTML = 'Scanning the skies <span class="spinner"></span>';
   showStatus('Loading space photos…');
@@ -256,6 +268,7 @@ async function getSpaceImages() {
 
   try {
     const response = await fetch(requestUrl);
+    if (currentRequestId !== requestId) return;
     if (!response.ok) {
       if (response.status === 429) {
         throw new Error('NASA is rate-limiting requests. Please wait a moment and try again.');
@@ -263,6 +276,7 @@ async function getSpaceImages() {
       throw new Error(`NASA API request failed with status ${response.status}`);
     }
     const responseData = await response.json();
+    if (currentRequestId !== requestId) return;
     const results = Array.isArray(responseData) ? responseData : [responseData];
     spaceImages = results
       .filter((image) => image && image.date && image.title && image.explanation &&
@@ -271,23 +285,27 @@ async function getSpaceImages() {
     requestCache.set(requestKey, spaceImages);
     if (spaceImages.length) {
       renderGallery();
+      selectedRange.textContent = `${formatDate(startDate)} — ${formatDate(endDate)}`;
       showStatus(`Archive loaded · ${formatDate(startDate)} — ${formatDate(endDate)}`, 'success');
     } else {
       showEmptyState('✦', 'NASA returned no usable discoveries for these dates.');
       showStatus('No space photos were available for this range.', 'error');
     }
   } catch (error) {
+    if (currentRequestId !== requestId) return;
     console.error(error);
     showErrorState(error.message.includes('rate-limiting')
       ? error.message
-      : 'We could not load NASA’s space photos. Check your connection and try again.');
+      : 'We could not load NASA’s space photos. Check your connection and try again.', true);
     showStatus(error.message.includes('rate-limiting')
       ? error.message
       : 'Unable to load the archive. Please try again.', 'error');
   } finally {
-    activeRequest = null;
-    fetchButton.disabled = false;
-    fetchButton.innerHTML = 'Get Space Images <span>↗</span>';
+    if (currentRequestId === requestId) {
+      activeRequest = null;
+      fetchButton.disabled = false;
+      fetchButton.innerHTML = 'Get Space Images <span>↗</span>';
+    }
   }
 }
 
