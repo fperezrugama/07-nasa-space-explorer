@@ -23,8 +23,8 @@ const modalLink = document.getElementById('modalLink');
 // dateRange.js sets the valid dates and the default nine-day range.
 setupDateInputs(startInput, endInput);
 
-// The Worker adds NASA_API_KEY server-side. Never put a personal key in this file.
-const APOD_PROXY_URL = 'https://nasa-apod-proxy.YOUR_SUBDOMAIN.workers.dev/api/apod';
+const API_URL = 'https://api.nasa.gov/planetary/apod';
+const API_KEY = 'DEMO_KEY';
 let spaceImages = [];
 let showingFavoritesOnly = false;
 let favorites = JSON.parse(localStorage.getItem('nasaFavorites') || '[]');
@@ -82,11 +82,13 @@ function readDateRange() {
   return { startDate, endDate };
 }
 
-async function fetchApodData(startDate, endDate) {
-  const requestUrl = new URL(APOD_PROXY_URL);
+async function fetchSpaceImages(startDate, endDate) {
+  const requestUrl = new URL(API_URL);
   requestUrl.search = new URLSearchParams({
+    api_key: API_KEY,
     start_date: startDate,
-    end_date: endDate
+    end_date: endDate,
+    thumbs: 'true'
   });
 
   // async/await keeps the request steps readable while fetch waits for NASA's response.
@@ -102,7 +104,7 @@ async function fetchApodData(startDate, endDate) {
     if (response.status === 429) {
       throw new Error(serviceMessage || 'NASA is rate-limiting requests. Please wait a moment and try again.');
     }
-    throw new Error(serviceMessage || `NASA service request failed with status ${response.status}`);
+    throw new Error(serviceMessage || `NASA API request failed with status ${response.status}`);
   }
 
   // NASA returns JSON entries. Convert a single entry to an array for one rendering path.
@@ -116,22 +118,26 @@ async function fetchApodData(startDate, endDate) {
 
 function getImageUrl(image) {
   if (image.media_type !== 'image') return null;
-  const candidate = image.hdurl || image.url;
-  if (!candidate) return null;
+  const candidates = [image.hdurl, image.url].filter(Boolean);
 
-  try {
-    const url = new URL(candidate);
-    const isKnownPlaceholder = url.pathname.includes('nasa-logo') ||
-      (url.hostname === 'science.nasa.gov' && url.pathname.includes('/themes/'));
-    const isArticleUrl = /\/(article|news|missions|blog)\//i.test(url.pathname);
-    const hasImagePath = /\.(avif|gif|jpe?g|png|webp)$/i.test(url.pathname) ||
-      /\/(image|images|uploads)\//i.test(url.pathname);
-    const isScienceArticle = url.hostname === 'science.nasa.gov' && !hasImagePath;
-    return url.protocol === 'https:' && !isKnownPlaceholder &&
-      !isArticleUrl && !isScienceArticle ? url.href : null;
-  } catch (error) {
-    return null;
+  for (const candidate of candidates) {
+    try {
+      const url = new URL(candidate);
+      const isKnownPlaceholder = url.pathname.includes('nasa-logo') ||
+        (url.hostname === 'science.nasa.gov' && url.pathname.includes('/themes/'));
+      const isArticleUrl = /\/(article|news|missions|blog)\//i.test(url.pathname);
+      const hasImagePath = /\.(avif|gif|jpe?g|png|webp)$/i.test(url.pathname) ||
+        /\/(image|images|uploads)\//i.test(url.pathname);
+      const isScienceArticle = url.hostname === 'science.nasa.gov' && !hasImagePath;
+      if (url.protocol === 'https:' && !isKnownPlaceholder &&
+          !isArticleUrl && !isScienceArticle) {
+        return url.href;
+      }
+    } catch (error) {
+      // Try the next available APOD media URL.
+    }
   }
+  return null;
 }
 
 function getVideoEmbedUrl(videoUrl) {
@@ -341,7 +347,7 @@ async function getSpaceImages() {
   showLoadingState();
 
   try {
-    const results = await fetchApodData(startDate, endDate);
+    const results = await fetchSpaceImages(startDate, endDate);
     if (currentRequestId !== requestId) return;
     spaceImages = results;
     requestCache.set(requestKey, spaceImages);
@@ -356,12 +362,11 @@ async function getSpaceImages() {
   } catch (error) {
     if (currentRequestId !== requestId) return;
     console.error(error);
-    showErrorState(error.message.includes('rate-limiting')
+    const errorMessage = error instanceof Error
       ? error.message
-      : 'We could not load NASA’s space photos. Check your connection and try again.', true);
-    showStatus(error.message.includes('rate-limiting')
-      ? error.message
-      : 'Unable to load the archive. Please try again.', 'error');
+      : 'The NASA request failed unexpectedly.';
+    showErrorState(errorMessage, true);
+    showStatus(errorMessage, 'error');
   } finally {
     if (currentRequestId === requestId) {
       activeRequest = null;
