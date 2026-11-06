@@ -84,3 +84,37 @@ body.light-theme { --background: #edf1fa; --surface: #fff; --surface-light: #e4e
 }
 @media (min-width: 701px) and (max-width: 1050px) { .gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 700px) { body { padding: 0 15px 50px; }.hero { padding: 60px 0 38px; }.filters, .gallery-toolbar { align-items: stretch; flex-direction: column; }.date-fields { align-items: stretch; flex-wrap: wrap; }.date-fields label { flex: 1 1 130px; }.date-fields input { min-width: 0; width: 100%; }.date-arrow { display: none; }.primary-button { min-height: 48px; width: 100%; }.gallery-actions { flex-wrap: wrap; }.search-box { flex: 1 1 180px; min-height: 46px; }.search-box input { width: 100%; }.filter-button, .fact-button { min-height: 46px; }.modal { align-items: flex-start; overflow-y: auto; padding: 12px; }.modal-content { max-height: calc(100vh - 24px); margin: auto 0; }.modal-media { max-height: 42vh; }.modal-media img { max-height: 42vh; width: 100%; }.modal-media iframe { height: min(52vw, 300px); }.modal-body { padding: 22px; }.modal-body h2 { font-size: 23px; padding-right: 35px; }.space-fact { align-items: flex-start; flex-wrap: wrap; }.fact-button { margin-left: 0; }.site-footer { align-items: flex-start; flex-direction: column; gap: 10px; } }
+
+/* ============================================================
+   PROJECT 7 — FINAL CSS IMPROVEMENTS
+   ============================================================ */
+
+/* Keep the modal above all page content */
+.modal {
+  z-index: 1000;
+}
+
+/* Clear keyboard focus indicator */
+.gallery-item:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 3px;
+}
+
+/* Ensure images fit properly inside cards */
+.card-media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Prevent favorite buttons from being hidden by media */
+.favorite-button {
+  z-index: 2;
+}
+
+/* Ensure video previews remain readable */
+.video-preview span,
+.video-preview p {
+  z-index: 1;
+}
