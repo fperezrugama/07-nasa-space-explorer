@@ -65,6 +65,7 @@ input[type=date] { color-scheme: dark; }
 .gallery-item { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; cursor: pointer; overflow: hidden; transition: border-color .2s, transform .2s; }
 .gallery-item:hover, .gallery-item:focus-visible { border-color: var(--blue); outline: 0; transform: translateY(-4px); }
 .video-card { border-color: rgba(255, 82, 77, .45); }.video-card .card-date { color: var(--blue); }
+.unavailable-media { align-items: center; background: linear-gradient(135deg, #151d39, #080b18); color: var(--muted); display: flex; font-family: 'DM Mono', monospace; font-size: 11px; height: 100%; justify-content: center; letter-spacing: .08em; min-height: 180px; text-transform: uppercase; }
 .card-media { aspect-ratio: 1.35; background: #070a16; overflow: hidden; position: relative; }
 .card-media img { height: 100%; object-fit: cover; transition: transform .5s; width: 100%; }.gallery-item:hover .card-media img { transform: scale(1.04); }
 .favorite-button { background: rgba(9, 13, 29, .75); border: 1px solid rgba(255,255,255,.25); border-radius: 50%; color: white; font-size: 21px; height: 38px; position: absolute; right: 12px; top: 12px; width: 38px; }

@@ -23,9 +23,8 @@ const modalLink = document.getElementById('modalLink');
 // dateRange.js sets the valid dates and the default nine-day range.
 setupDateInputs(startInput, endInput);
 
-const API_URL = 'https://api.nasa.gov/planetary/apod';
-// Keep the public demo key in this frontend. Personal keys should stay out of source control.
-const API_KEY = 'DEMO_KEY';
+// The Worker adds NASA_API_KEY server-side. Never put a personal key in this file.
+const APOD_PROXY_URL = 'https://nasa-apod-proxy.YOUR_SUBDOMAIN.workers.dev/api/apod';
 let spaceImages = [];
 let showingFavoritesOnly = false;
 let favorites = JSON.parse(localStorage.getItem('nasaFavorites') || '[]');
@@ -84,9 +83,8 @@ function readDateRange() {
 }
 
 async function fetchApodData(startDate, endDate) {
-  const requestUrl = new URL(API_URL);
+  const requestUrl = new URL(APOD_PROXY_URL);
   requestUrl.search = new URLSearchParams({
-    api_key: API_KEY,
     start_date: startDate,
     end_date: endDate
   });
@@ -94,10 +92,17 @@ async function fetchApodData(startDate, endDate) {
   // async/await keeps the request steps readable while fetch waits for NASA's response.
   const response = await fetch(requestUrl);
   if (!response.ok) {
-    if (response.status === 429) {
-      throw new Error('NASA is rate-limiting requests. Please wait a moment and try again.');
+    let serviceMessage = '';
+    try {
+      const errorData = await response.json();
+      serviceMessage = typeof errorData.error === 'string' ? errorData.error : '';
+    } catch (error) {
+      serviceMessage = '';
     }
-    throw new Error(`NASA API request failed with status ${response.status}`);
+    if (response.status === 429) {
+      throw new Error(serviceMessage || 'NASA is rate-limiting requests. Please wait a moment and try again.');
+    }
+    throw new Error(serviceMessage || `NASA service request failed with status ${response.status}`);
   }
 
   // NASA returns JSON entries. Convert a single entry to an array for one rendering path.
@@ -105,8 +110,28 @@ async function fetchApodData(startDate, endDate) {
   const results = Array.isArray(responseData) ? responseData : [responseData];
   return results
     .filter((image) => image && image.date && image.title && image.explanation &&
-      (image.media_type === 'image' || image.media_type === 'video') && image.url)
+      (image.media_type === 'image' || image.media_type === 'video'))
     .sort((a, b) => b.date.localeCompare(a.date));
+}
+
+function getImageUrl(image) {
+  if (image.media_type !== 'image') return null;
+  const candidate = image.hdurl || image.url;
+  if (!candidate) return null;
+
+  try {
+    const url = new URL(candidate);
+    const isKnownPlaceholder = url.pathname.includes('nasa-logo') ||
+      (url.hostname === 'science.nasa.gov' && url.pathname.includes('/themes/'));
+    const isArticleUrl = /\/(article|news|missions|blog)\//i.test(url.pathname);
+    const hasImagePath = /\.(avif|gif|jpe?g|png|webp)$/i.test(url.pathname) ||
+      /\/(image|images|uploads)\//i.test(url.pathname);
+    const isScienceArticle = url.hostname === 'science.nasa.gov' && !hasImagePath;
+    return url.protocol === 'https:' && !isKnownPlaceholder &&
+      !isArticleUrl && !isScienceArticle ? url.href : null;
+  } catch (error) {
+    return null;
+  }
 }
 
 function getVideoEmbedUrl(videoUrl) {
@@ -180,11 +205,19 @@ function renderGallery() {
     if (image.media_type === 'video') {
       mediaContainer.append(createVideoPreview(image));
     } else {
-      const thumbnail = document.createElement('img');
-      thumbnail.src = image.url;
-      thumbnail.alt = image.title;
-      thumbnail.loading = 'lazy';
-      mediaContainer.append(thumbnail);
+      const imageUrl = getImageUrl(image);
+      if (imageUrl) {
+        const thumbnail = document.createElement('img');
+        thumbnail.src = imageUrl;
+        thumbnail.alt = image.alt || image.title;
+        thumbnail.loading = 'lazy';
+        thumbnail.addEventListener('error', () => {
+          thumbnail.replaceWith(createUnavailableMedia('Image unavailable'));
+        });
+        mediaContainer.append(thumbnail);
+      } else {
+        mediaContainer.append(createUnavailableMedia('Image unavailable'));
+      }
     }
 
     const favoriteButton = document.createElement('button');
@@ -234,6 +267,13 @@ function createVideoPreview(image) {
   videoLabel.textContent = 'Watch Video';
   videoPreview.append(playIcon, videoLabel);
   return videoPreview;
+}
+
+function createUnavailableMedia(label) {
+  const unavailable = document.createElement('div');
+  unavailable.className = 'unavailable-media';
+  unavailable.textContent = label;
+  return unavailable;
 }
 
 function showEmptyState(icon, message) {
@@ -359,16 +399,24 @@ function openModal(image) {
       modalMedia.append(videoPreview);
     }
   } else {
-    const imageElement = document.createElement('img');
-    imageElement.src = image.hdurl || image.url;
-    imageElement.alt = image.title;
-    modalMedia.append(imageElement);
+    const imageUrl = getImageUrl(image);
+    if (imageUrl) {
+      const imageElement = document.createElement('img');
+      imageElement.src = imageUrl;
+      imageElement.alt = image.alt || image.title;
+      imageElement.addEventListener('error', () => {
+        modalMedia.replaceChildren(createUnavailableMedia('Image unavailable'));
+      });
+      modalMedia.append(imageElement);
+    } else {
+      modalMedia.append(createUnavailableMedia('Image unavailable'));
+    }
   }
 
   modalDate.textContent = formatDate(image.date);
   modalTitle.textContent = image.title;
   modalExplanation.textContent = image.explanation;
-  modalLink.href = image.url;
+  modalLink.href = image.permalink || image.url || '#';
   modalLink.textContent = image.media_type === 'video' ? 'Watch original video ↗' : 'View original on NASA.gov ↗';
   modal.hidden = false;
   appContainer.inert = true;
