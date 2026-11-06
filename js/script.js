@@ -58,6 +58,57 @@ const formatDate = (date) => new Date(`${date}T00:00:00`).toLocaleDateString('en
 
 const shortenText = (text, length = 150) => text.length > length ? `${text.slice(0, length).trim()}…` : text;
 
+function isValidDate(date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const parsedDate = new Date(`${date}T00:00:00`);
+  const [year, month, day] = date.split('-').map(Number);
+  return parsedDate.getUTCFullYear() === year &&
+    parsedDate.getUTCMonth() + 1 === month &&
+    parsedDate.getUTCDate() === day;
+}
+
+function readDateRange() {
+  const startDate = startInput.value;
+  const endDate = endInput.value;
+  if (!startDate || !endDate) {
+    throw new Error('Please choose both a start and end date.');
+  }
+  if (!isValidDate(startDate) || !isValidDate(endDate) ||
+      startDate < earliestDate || endDate > today) {
+    throw new Error('Choose dates between June 16, 1995 and today.');
+  }
+  if (startDate > endDate) {
+    throw new Error('The start date must be before the end date.');
+  }
+  return { startDate, endDate };
+}
+
+async function fetchApodData(startDate, endDate) {
+  const requestUrl = new URL(API_URL);
+  requestUrl.search = new URLSearchParams({
+    api_key: API_KEY,
+    start_date: startDate,
+    end_date: endDate
+  });
+
+  // async/await keeps the request steps readable while fetch waits for NASA's response.
+  const response = await fetch(requestUrl);
+  if (!response.ok) {
+    if (response.status === 429) {
+      throw new Error('NASA is rate-limiting requests. Please wait a moment and try again.');
+    }
+    throw new Error(`NASA API request failed with status ${response.status}`);
+  }
+
+  // NASA returns JSON entries. Convert a single entry to an array for one rendering path.
+  const responseData = await response.json();
+  const results = Array.isArray(responseData) ? responseData : [responseData];
+  return results
+    .filter((image) => image && image.date && image.title && image.explanation &&
+      (image.media_type === 'image' || image.media_type === 'video') && image.url)
+    .sort((a, b) => b.date.localeCompare(a.date));
+}
+
 function getVideoEmbedUrl(videoUrl) {
   try {
     const url = new URL(videoUrl);
@@ -102,6 +153,7 @@ function showStatus(message, type = '') {
 }
 
 function renderGallery() {
+  // Build cards with DOM methods so NASA text is treated as text, not HTML.
   const searchTerm = searchInput.value.toLowerCase().trim();
   const visibleImages = spaceImages.filter((image) => {
     const matchesSearch = image.title.toLowerCase().includes(searchTerm) ||
@@ -126,23 +178,7 @@ function renderGallery() {
     const mediaContainer = document.createElement('div');
     mediaContainer.className = 'card-media';
     if (image.media_type === 'video') {
-      const videoPreview = document.createElement('div');
-      videoPreview.className = 'video-preview';
-      if (image.thumbnail_url) {
-        const thumbnail = document.createElement('img');
-        thumbnail.className = 'video-thumbnail';
-        thumbnail.src = image.thumbnail_url;
-        thumbnail.alt = '';
-        thumbnail.loading = 'lazy';
-        thumbnail.addEventListener('error', () => thumbnail.remove());
-        videoPreview.append(thumbnail);
-      }
-      const playIcon = document.createElement('span');
-      playIcon.textContent = '▶';
-      const videoLabel = document.createElement('p');
-      videoLabel.textContent = 'Watch Video';
-      videoPreview.append(playIcon, videoLabel);
-      mediaContainer.append(videoPreview);
+      mediaContainer.append(createVideoPreview(image));
     } else {
       const thumbnail = document.createElement('img');
       thumbnail.src = image.url;
@@ -178,6 +214,26 @@ function renderGallery() {
     card.append(mediaContainer, content);
     return card;
   }));
+}
+
+function createVideoPreview(image) {
+  const videoPreview = document.createElement('div');
+  videoPreview.className = 'video-preview';
+  if (image.thumbnail_url) {
+    const thumbnail = document.createElement('img');
+    thumbnail.className = 'video-thumbnail';
+    thumbnail.src = image.thumbnail_url;
+    thumbnail.alt = '';
+    thumbnail.loading = 'lazy';
+    thumbnail.addEventListener('error', () => thumbnail.remove());
+    videoPreview.append(thumbnail);
+  }
+  const playIcon = document.createElement('span');
+  playIcon.textContent = '▶';
+  const videoLabel = document.createElement('p');
+  videoLabel.textContent = 'Watch Video';
+  videoPreview.append(playIcon, videoLabel);
+  return videoPreview;
 }
 
 function showEmptyState(icon, message) {
@@ -218,30 +274,14 @@ function showErrorState(message, showRetry = false) {
 }
 
 async function getSpaceImages() {
-  const startDate = startInput.value;
-  const endDate = endInput.value;
-  if (!startDate || !endDate) {
-    showStatus('Please choose both a start and end date.', 'error');
+  let dateRange;
+  try {
+    dateRange = readDateRange();
+  } catch (error) {
+    showStatus(error.message, 'error');
     return;
   }
-
-  const validDate = (date) => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
-    const parsedDate = new Date(`${date}T00:00:00`);
-    const [year, month, day] = date.split('-').map(Number);
-    return parsedDate.getUTCFullYear() === year &&
-      parsedDate.getUTCMonth() + 1 === month &&
-      parsedDate.getUTCDate() === day;
-  };
-  if (!validDate(startDate) || !validDate(endDate) ||
-      startDate < earliestDate || endDate > today) {
-    showStatus('Choose dates between June 16, 1995 and today.', 'error');
-    return;
-  }
-  if (startDate > endDate) {
-    showStatus('The start date must be before the end date.', 'error');
-    return;
-  }
+  const { startDate, endDate } = dateRange;
 
   const requestKey = `${startDate}:${endDate}`;
   if (activeRequest === requestKey) return;
@@ -253,12 +293,6 @@ async function getSpaceImages() {
     return;
   }
 
-  const requestUrl = new URL(API_URL);
-  requestUrl.search = new URLSearchParams({
-    api_key: API_KEY,
-    start_date: startDate,
-    end_date: endDate
-  });
   activeRequest = requestKey;
   const currentRequestId = ++requestId;
   fetchButton.disabled = true;
@@ -267,21 +301,9 @@ async function getSpaceImages() {
   showLoadingState();
 
   try {
-    const response = await fetch(requestUrl);
+    const results = await fetchApodData(startDate, endDate);
     if (currentRequestId !== requestId) return;
-    if (!response.ok) {
-      if (response.status === 429) {
-        throw new Error('NASA is rate-limiting requests. Please wait a moment and try again.');
-      }
-      throw new Error(`NASA API request failed with status ${response.status}`);
-    }
-    const responseData = await response.json();
-    if (currentRequestId !== requestId) return;
-    const results = Array.isArray(responseData) ? responseData : [responseData];
-    spaceImages = results
-      .filter((image) => image && image.date && image.title && image.explanation &&
-        (image.media_type === 'image' || image.media_type === 'video') && image.url)
-      .sort((a, b) => b.date.localeCompare(a.date));
+    spaceImages = results;
     requestCache.set(requestKey, spaceImages);
     if (spaceImages.length) {
       renderGallery();
@@ -321,6 +343,7 @@ function openModal(image) {
   modalMedia.replaceChildren();
 
   if (image.media_type === 'video') {
+    // Videos get an iframe only for known safe embed hosts; other URLs use the source link.
     const embedUrl = getVideoEmbedUrl(image.url);
     if (embedUrl) {
       const video = document.createElement('iframe');
@@ -360,57 +383,63 @@ function closeModal() {
   if (lastFocusedElement) lastFocusedElement.focus();
 }
 
-fetchButton.addEventListener('click', getSpaceImages);
-newFactButton.addEventListener('click', showRandomFact);
-searchInput.addEventListener('input', renderGallery);
-favoritesToggle.addEventListener('click', () => {
-  showingFavoritesOnly = !showingFavoritesOnly;
-  favoritesToggle.classList.toggle('active', showingFavoritesOnly);
-  favoritesToggle.setAttribute('aria-pressed', showingFavoritesOnly);
-  renderGallery();
-});
-gallery.addEventListener('click', (event) => {
-  const favoriteButton = event.target.closest('[data-favorite]');
-  const openButton = event.target.closest('[data-open]');
-  const galleryItem = event.target.closest('.gallery-item');
-  if (favoriteButton) {
-    event.stopPropagation();
-    toggleFavorite(favoriteButton.dataset.favorite);
-  } else if (openButton) {
-    openModal(spaceImages.find((image) => image.date === openButton.dataset.open));
-  } else if (galleryItem) {
-    openModal(spaceImages.find((image) => image.date === galleryItem.dataset.date));
-  }
-});
-gallery.addEventListener('keydown', (event) => {
-  if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('.gallery-item')) {
-    event.preventDefault();
-    openModal(spaceImages.find((image) => image.date === event.target.dataset.date));
-  }
-});
-closeModalButton.addEventListener('click', closeModal);
-modal.addEventListener('click', (event) => {
-  if (event.target.matches('[data-close-modal]')) closeModal();
-});
-document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && !modal.hidden) closeModal();
-});
-modal.addEventListener('keydown', (event) => {
-  if (event.key !== 'Tab') return;
+function initializeApp() {
+  fetchButton.addEventListener('click', getSpaceImages);
+  newFactButton.addEventListener('click', showRandomFact);
+  searchInput.addEventListener('input', renderGallery);
+  favoritesToggle.addEventListener('click', () => {
+    showingFavoritesOnly = !showingFavoritesOnly;
+    favoritesToggle.classList.toggle('active', showingFavoritesOnly);
+    favoritesToggle.setAttribute('aria-pressed', showingFavoritesOnly);
+    renderGallery();
+  });
+  // One delegated listener handles clicks for dynamically created gallery cards.
+  gallery.addEventListener('click', (event) => {
+    const favoriteButton = event.target.closest('[data-favorite]');
+    const openButton = event.target.closest('[data-open]');
+    const galleryItem = event.target.closest('.gallery-item');
+    if (favoriteButton) {
+      event.stopPropagation();
+      toggleFavorite(favoriteButton.dataset.favorite);
+    } else if (openButton) {
+      openModal(spaceImages.find((image) => image.date === openButton.dataset.open));
+    } else if (galleryItem) {
+      openModal(spaceImages.find((image) => image.date === galleryItem.dataset.date));
+    }
+  });
+  gallery.addEventListener('keydown', (event) => {
+    if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('.gallery-item')) {
+      event.preventDefault();
+      openModal(spaceImages.find((image) => image.date === event.target.dataset.date));
+    }
+  });
+  closeModalButton.addEventListener('click', closeModal);
+  modal.addEventListener('click', (event) => {
+    if (event.target.matches('[data-close-modal]')) closeModal();
+  });
+  // Modal keyboard events support Escape and keep Tab focus inside the dialog.
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !modal.hidden) closeModal();
+  });
+  modal.addEventListener('keydown', (event) => {
+    if (event.key !== 'Tab') return;
 
-  const focusableElements = modal.querySelectorAll('button, a[href], iframe');
-  const firstFocusable = focusableElements[0];
-  const lastFocusable = focusableElements[focusableElements.length - 1];
-  if (event.shiftKey && document.activeElement === firstFocusable) {
-    event.preventDefault();
-    lastFocusable.focus();
-  } else if (!event.shiftKey && document.activeElement === lastFocusable) {
-    event.preventDefault();
-    firstFocusable.focus();
-  }
-});
-themeToggle.addEventListener('click', () => {
+    const focusableElements = modal.querySelectorAll('button, a[href], iframe');
+    const firstFocusable = focusableElements[0];
+    const lastFocusable = focusableElements[focusableElements.length - 1];
+    if (event.shiftKey && document.activeElement === firstFocusable) {
+      event.preventDefault();
+      lastFocusable.focus();
+    } else if (!event.shiftKey && document.activeElement === lastFocusable) {
+      event.preventDefault();
+      firstFocusable.focus();
+    }
+  });
+  themeToggle.addEventListener('click', () => {
   const isLight = document.body.classList.toggle('light-theme');
   themeToggle.textContent = isLight ? '☾' : '☼';
   themeToggle.setAttribute('aria-label', isLight ? 'Switch to dark theme' : 'Switch to light theme');
-});
+  });
+}
+
+initializeApp();
