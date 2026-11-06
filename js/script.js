@@ -48,6 +48,35 @@ const formatDate = (date) => new Date(`${date}T00:00:00`).toLocaleDateString('en
 
 const shortenText = (text, length = 150) => text.length > length ? `${text.slice(0, length).trim()}…` : text;
 
+function getVideoEmbedUrl(videoUrl) {
+  try {
+    const url = new URL(videoUrl);
+    if (url.protocol !== 'https:') return null;
+
+    if (url.hostname === 'youtu.be') {
+      const videoId = url.pathname.slice(1);
+      return videoId ? `https://www.youtube.com/embed/${encodeURIComponent(videoId)}` : null;
+    }
+
+    if (url.hostname === 'www.youtube.com' || url.hostname === 'youtube.com') {
+      const videoId = url.searchParams.get('v');
+      return videoId ? `https://www.youtube.com/embed/${encodeURIComponent(videoId)}` : null;
+    }
+
+    if (url.hostname === 'vimeo.com') {
+      const videoId = url.pathname.split('/').filter(Boolean)[0];
+      return videoId && /^\d+$/.test(videoId) ? `https://player.vimeo.com/video/${videoId}` : null;
+    }
+
+    if (url.hostname === 'player.vimeo.com' && url.pathname.startsWith('/video/')) {
+      return url.href;
+    }
+  } catch (error) {
+    return null;
+  }
+  return null;
+}
+
 function showRandomFact() {
   const currentFact = spaceFact.textContent;
   const availableFacts = spaceFacts.filter((fact) => fact !== currentFact);
@@ -86,10 +115,19 @@ function renderGallery() {
     if (image.media_type === 'video') {
       const videoPreview = document.createElement('div');
       videoPreview.className = 'video-preview';
+      if (image.thumbnail_url) {
+        const thumbnail = document.createElement('img');
+        thumbnail.className = 'video-thumbnail';
+        thumbnail.src = image.thumbnail_url;
+        thumbnail.alt = '';
+        thumbnail.loading = 'lazy';
+        thumbnail.addEventListener('error', () => thumbnail.remove());
+        videoPreview.append(thumbnail);
+      }
       const playIcon = document.createElement('span');
       playIcon.textContent = '▶';
       const videoLabel = document.createElement('p');
-      videoLabel.textContent = 'NASA video';
+      videoLabel.textContent = 'Watch Video';
       videoPreview.append(playIcon, videoLabel);
       mediaContainer.append(videoPreview);
     } else {
@@ -122,7 +160,7 @@ function renderGallery() {
     readMore.className = 'read-more';
     readMore.dataset.open = image.date;
     readMore.type = 'button';
-    readMore.textContent = 'Read story ↗';
+    readMore.textContent = image.media_type === 'video' ? 'Watch Video ↗' : 'Read story ↗';
     content.append(date, title, explanation, readMore);
     card.append(mediaContainer, content);
     return card;
@@ -254,11 +292,20 @@ function openModal(image) {
   modalMedia.replaceChildren();
 
   if (image.media_type === 'video') {
-    const video = document.createElement('iframe');
-    video.src = image.url;
-    video.title = image.title;
-    video.allowFullscreen = true;
-    modalMedia.append(video);
+    const embedUrl = getVideoEmbedUrl(image.url);
+    if (embedUrl) {
+      const video = document.createElement('iframe');
+      video.src = embedUrl;
+      video.title = image.title;
+      video.allowFullscreen = true;
+      video.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture');
+      modalMedia.append(video);
+    } else {
+      const videoPreview = document.createElement('div');
+      videoPreview.className = 'modal-video-placeholder';
+      videoPreview.textContent = 'This video opens on its original website.';
+      modalMedia.append(videoPreview);
+    }
   } else {
     const imageElement = document.createElement('img');
     imageElement.src = image.hdurl || image.url;
@@ -270,6 +317,7 @@ function openModal(image) {
   modalTitle.textContent = image.title;
   modalExplanation.textContent = image.explanation;
   modalLink.href = image.url;
+  modalLink.textContent = image.media_type === 'video' ? 'Watch original video ↗' : 'View original on NASA.gov ↗';
   modal.hidden = false;
   appContainer.inert = true;
   document.body.classList.add('modal-open');
