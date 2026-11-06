@@ -32,12 +32,20 @@ let lastFocusedElement;
 const requestCache = new Map();
 let activeRequest = null;
 const spaceFacts = [
+  'Jupiter’s Great Red Spot is a storm that has raged for at least 150 years.',
+  'The Milky Way galaxy is about 100,000 light-years across.',
+  'Light travels through space at about 300,000 kilometers per second.',
+  'Saturn’s rings are made mostly of pieces of water ice and rock.',
   'A day on Venus is longer than a year on Venus.',
+  'Mars has the tallest volcano in the Solar System, Olympus Mons.',
+  'A black hole’s gravity is so strong that even light cannot escape its event horizon.',
   'Neutron stars can spin more than 600 times every second.',
   'The footprints left on the Moon could last for millions of years.',
   'Jupiter is so large that more than 1,300 Earths could fit inside it.',
   'Light from the Sun takes about eight minutes to reach Earth.',
-  'Saturn would float in water because its average density is lower than water.'
+  'Saturn would float in water because its average density is lower than water.',
+  'The Sun contains more than 99 percent of the total mass in our Solar System.',
+  'The Moon is moving away from Earth by about 3.8 centimeters each year.'
 ];
 
 const formatDate = (date) => new Date(`${date}T00:00:00`).toLocaleDateString('en-US', {
@@ -82,6 +90,9 @@ function showRandomFact() {
   const availableFacts = spaceFacts.filter((fact) => fact !== currentFact);
   spaceFact.textContent = availableFacts[Math.floor(Math.random() * availableFacts.length)];
 }
+
+// Show a different astronomy fact whenever the page loads.
+showRandomFact();
 
 function showStatus(message, type = '') {
   statusMessage.textContent = message;
